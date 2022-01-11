@@ -4,6 +4,10 @@ const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
 const encrypt = require('mongoose-encryption');
+// var md5 = require('md5');
+
+const bcrypt = require('bcrypt');
+saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS);
 
 const app = express();
 
@@ -24,9 +28,8 @@ const userSchema = new mongoose.Schema({
 });
 
 ////////////// add encryption to userSchema //////////////
-const secret = 'bumperisthecutestdoggointheworld!';
-const encryptedFields = ['password'];
-userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields:encryptedFields});
+// const encryptedFields = ['password'];
+// userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields:encryptedFields});
 /////////////////////////////////////////////////////////
 const User = mongoose.model('User', userSchema);
 
@@ -43,17 +46,23 @@ app.route('/login')
         res.render('login');
     })
     .post((req, res) => {
-        const userName = req.body.username;
-        const password = req.body.password;
-        User.findOne({email: userName}, (err, foundUser) => {
+        const email = req.body.username;
+        const userEnteredPassword = req.body.password;
+        User.findOne({
+            email: email
+        }, (err, foundUser) => {
             if (err) {
                 console.log(err);
             } else if (foundUser) {
-                if (foundUser.password === password) {
-                    res.render('secrets');
-                } else {
-                    console.log('Password is incorrect.')
-                };
+                bcrypt.compare(userEnteredPassword, foundUser.password, (err, result) => {
+                    if (err) {
+                        console.log('There was a bcrypt error while checking the password')
+                    } else if (result) {
+                        res.render('secrets');
+                    } else {
+                        console.log('Password is incorrect.');
+                    };
+                });
             } else {
                 console.log(userName + ' is an invalid email address.');
             };
@@ -67,20 +76,28 @@ app.route('/register')
         res.render('register');
     })
     .post((req, res) => {
-        const userName = req.body.username;
-        const password = req.body.password;
-        const newUser = new User({
-            email: userName,
-            password: password
-        });
-        newUser.save((err, result) => {
-            if (!err) {
-                console.log('Successfully created the new user.');
-                res.render('secrets');
+        const userEnteredPassword = req.body.password;
+        const email = req.body.email;
+        bcrypt.hash(userEnteredPassword, saltRounds, (err, generatedHash) => {
+            if (err) {
+                console.log('There was a bcrypt error.')
             } else {
-                console.log('There was an issue creating the new user.');
+                const newUser = new User({
+                    email: email,
+                    password: generatedHash
+                });
+                newUser.save((err, result) => {
+                    if (!err) {
+                        console.log('Successfully created the new user.');
+                        res.render('secrets');
+                    } else {
+                        console.log('There was an issue creating the new user.');
+                    };
+                });
             };
-        })
+
+        });
+
     });
 
 ///////////////////////////////////////////////// app.listen /////////////////////////////////////////////////
